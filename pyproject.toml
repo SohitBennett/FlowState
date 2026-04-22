@@ -1,0 +1,91 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "flowstate"
+version = "0.1.0"
+description = "Enterprise MLOps & Real-Time Inference Engine"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+authors = [{ name = "FlowState" }]
+dependencies = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "gunicorn>=22.0",
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    "structlog>=24.1",
+    "redis>=5.0",
+    "httpx>=0.27",
+    "orjson>=3.10",
+    "prometheus-client>=0.20",
+    "opentelemetry-api>=1.25",
+    "opentelemetry-sdk>=1.25",
+    "opentelemetry-instrumentation-fastapi>=0.46b0",
+    "opentelemetry-exporter-otlp>=1.25",
+    "onnxruntime>=1.18",
+    "transformers>=4.42",
+    "tokenizers>=0.19",
+    "numpy>=1.26",
+]
+
+[project.optional-dependencies]
+train = [
+    "torch>=2.3",
+    "datasets>=2.20",
+    "accelerate>=0.31",
+    "scikit-learn>=1.5",
+    "mlflow>=2.14",
+    "onnx>=1.16",
+    "onnxconverter-common>=1.14",
+    "evaluate>=0.4",
+]
+dev = [
+    "ruff>=0.5",
+    "black>=24.4",
+    "mypy>=1.10",
+    "pytest>=8.2",
+    "pytest-asyncio>=0.23",
+    "pytest-cov>=5.0",
+    "testcontainers[redis]>=4.7",
+    "schemathesis>=3.33",
+    "locust>=2.29",
+    "pre-commit>=3.7",
+    "types-redis",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "C4", "PL", "RUF", "ASYNC", "S"]
+ignore = ["S101", "PLR0913"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "PLR2004"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+plugins = ["pydantic.mypy"]
+files = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = "-ra --strict-markers --cov=flowstate --cov-report=term-missing --cov-fail-under=85"
+
+[tool.coverage.run]
+branch = true
+source = ["flowstate"]
