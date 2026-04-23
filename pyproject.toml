@@ -53,6 +53,7 @@ dev = [
     "schemathesis>=3.33",
     "locust>=2.29",
     "pre-commit>=3.7",
+    "scikit-learn>=1.5",
     "types-redis",
 ]
 
@@ -89,3 +90,11 @@ addopts = "-ra --strict-markers --cov=flowstate --cov-report=term-missing --cov-
 [tool.coverage.run]
 branch = true
 source = ["flowstate"]
+omit = [
+    # Heavy I/O entry points — covered by the integration pipeline (`make pipeline`),
+    # not by unit tests. evaluate.py stays in coverage because it is pure math.
+    "src/flowstate/training/train.py",
+    "src/flowstate/training/export_onnx.py",
+    "src/flowstate/training/register.py",
+    "src/flowstate/training/data.py",
+]
