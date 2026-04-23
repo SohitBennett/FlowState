@@ -39,6 +39,30 @@ make test
 | Prometheus  | http://localhost:9090   |
 | Grafana     | http://localhost:3000   |
 
+## Training pipeline (Phase 1)
+
+End-to-end: fine-tune → export to ONNX FP16 (with a cosine-similarity parity
+gate) → register in MLflow under the `staging` alias.
+
+```bash
+# one-shot smoke run: train on 1k samples, 1 epoch, then export + register
+make train    TRAIN_ARGS="--max-train-samples 1000 --epochs 1 --run-name smoke"
+make export
+make register
+
+# full run (the one that matters)
+make pipeline
+```
+
+Outputs:
+- `artifacts/latest/model/` — fine-tuned HF model + tokenizer
+- `artifacts/latest/eval_report.json` — accuracy, macro-F1, per-class F1, confusion matrix
+- `artifacts/latest/onnx/model_fp16.onnx` — quantized, production-bound model
+- `artifacts/latest/onnx/parity.json` — FP16 vs FP32 cosine similarity (gated ≥ 0.999)
+- `artifacts/latest/registry.json` — MLflow model version + alias
+
+MLflow UI at http://localhost:5000 logs all runs, params, metrics, and artifacts.
+
 ## Project layout
 
 See [PLAN.md §3](PLAN.md#3-repository-layout).
@@ -46,7 +70,7 @@ See [PLAN.md §3](PLAN.md#3-repository-layout).
 ## Status
 
 - [x] **Phase 0** — Foundations (tooling, compose stack, CI skeleton, FastAPI skeleton)
-- [ ] Phase 1 — Training pipeline (AG News + DistilBERT + MLflow + ONNX FP16)
+- [x] **Phase 1 (code)** — Training pipeline (AG News + DistilBERT + MLflow + ONNX FP16) — *awaiting first integration run*
 - [ ] Phase 2 — Inference runtime (ONNX, dynamic batcher, warmup)
 - [ ] Phase 3 — API layer (auth, rate limit, contract tests)
 - [ ] Phase 4 — Redis caching (single-flight, jittered TTL)

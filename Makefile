@@ -1,4 +1,4 @@
-.PHONY: help install dev lint fmt type test cov run up down build train benchmark smoke clean
+.PHONY: help install dev lint fmt type test cov run up down build train export register pipeline benchmark smoke clean
 
 PYTHON ?= python
 PIP ?= pip
@@ -14,7 +14,10 @@ help:
 	@echo "  run         Run API locally (uvicorn, reload)"
 	@echo "  up / down   docker compose up/down (full stack)"
 	@echo "  build       Build API container"
-	@echo "  train       Run training pipeline (Phase 1)"
+	@echo "  train       Fine-tune model on AG News + log to MLflow (Phase 1)"
+	@echo "  export      Export trained model to ONNX FP16 with parity gate"
+	@echo "  register    Register ONNX model to MLflow + set staging alias"
+	@echo "  pipeline    Run train -> export -> register end-to-end"
 	@echo "  benchmark   Run perf benchmark (Phase 7)"
 	@echo "  smoke       End-to-end smoke test"
 
@@ -51,7 +54,15 @@ build:
 	docker build -f docker/api.Dockerfile -t flowstate/api:dev .
 
 train:
-	$(PYTHON) -m flowstate.training.train
+	$(PYTHON) -m flowstate.training.train $(TRAIN_ARGS)
+
+export:
+	$(PYTHON) -m flowstate.training.export_onnx $(EXPORT_ARGS)
+
+register:
+	$(PYTHON) -m flowstate.training.register $(REGISTER_ARGS)
+
+pipeline: train export register
 
 benchmark:
 	$(PYTHON) scripts/benchmark.py
