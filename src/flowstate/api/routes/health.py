@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Response
+from fastapi import APIRouter, Depends, Response
 
 from flowstate import __version__
+from flowstate.api.deps import AppState, get_state
 from flowstate.api.schemas import HealthResponse, ReadyResponse
 from flowstate.monitoring.metrics import render_metrics
 
@@ -18,10 +19,13 @@ async def healthz() -> HealthResponse:
 
 
 @router.get("/readyz", response_model=ReadyResponse)
-async def readyz() -> ReadyResponse:
-    """Readiness — model loaded + cache reachable. Wired up in Phase 2/4."""
-    # Phase 0 stub: real checks land with the inference runtime + cache.
-    return ReadyResponse(status="ok", model_loaded=False, cache_connected=False)
+async def readyz(state: AppState = Depends(get_state)) -> ReadyResponse:
+    """Readiness — model loaded and warmed; cache wiring lands in Phase 4."""
+    return ReadyResponse(
+        status="ok" if state.ready else "starting",
+        model_loaded=state.model_loaded,
+        cache_connected=state.cache_connected,
+    )
 
 
 @router.get("/metrics")

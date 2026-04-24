@@ -27,10 +27,15 @@ class Settings(BaseSettings):
     # Model
     model_name: str = "ag-news-distilbert"
     model_stage: str = "Production"
-    model_path: str = "./artifacts/model.onnx"
-    tokenizer_path: str = "./artifacts/tokenizer"
+    model_path: str = "./artifacts/latest/onnx/model_fp16.onnx"
+    tokenizer_path: str = "./artifacts/latest/model"
     max_seq_len: int = 128
     num_labels: int = 4
+
+    # Inference runtime (0 = let ONNX Runtime auto-detect)
+    intra_op_num_threads: int = 0
+    inter_op_num_threads: int = 0
+    warmup_iterations: int = 5
 
     # Batcher
     batch_max_size: int = 32
