@@ -63,6 +63,30 @@ Outputs:
 
 MLflow UI at http://localhost:5000 logs all runs, params, metrics, and artifacts.
 
+## Inference runtime (Phase 2)
+
+The inference subsystem lives in [src/flowstate/inference/](src/flowstate/inference/):
+
+- `runtime.py` — ONNX Runtime session with thread tuning, async offload via `asyncio.to_thread`.
+- `tokenizer.py` — cached HF fast tokenizer with dynamic per-batch padding.
+- `batcher.py` — asyncio dynamic micro-batcher (max_batch_size=32, max_wait_ms=5).
+- `warmup.py` — synthetic inferences at varying sequence lengths, gates the readiness probe.
+- `postprocess.py` — stable softmax + top-prediction.
+
+The API lifespan loads the ONNX model (from `FLOWSTATE_MODEL_PATH`), starts the batcher,
+warms up the session, and only then flips `/readyz` to `ok`. If artifacts are missing the
+API still boots so development can proceed; `readyz` will report `model_loaded=false`.
+
+### Phase 2 benchmark (exit gate)
+
+```bash
+make pipeline          # prereq: produces artifacts/latest/
+make benchmark         # PyTorch FP32 vs ONNX FP32 vs ONNX FP16 + dynamic batcher
+```
+
+Writes `docs/perf/fp16-vs-fp32.md` + `.json`. Fails non-zero if the FP16 + batcher
+throughput is less than 3x the naive PyTorch baseline.
+
 ## Project layout
 
 See [PLAN.md §3](PLAN.md#3-repository-layout).
@@ -71,7 +95,7 @@ See [PLAN.md §3](PLAN.md#3-repository-layout).
 
 - [x] **Phase 0** — Foundations (tooling, compose stack, CI skeleton, FastAPI skeleton)
 - [x] **Phase 1 (code)** — Training pipeline (AG News + DistilBERT + MLflow + ONNX FP16) — *awaiting first integration run*
-- [ ] Phase 2 — Inference runtime (ONNX, dynamic batcher, warmup)
+- [x] **Phase 2 (code)** — Inference runtime (ONNX, dynamic batcher, warmup, benchmark harness) — *awaiting first benchmark run*
 - [ ] Phase 3 — API layer (auth, rate limit, contract tests)
 - [ ] Phase 4 — Redis caching (single-flight, jittered TTL)
 - [ ] Phase 5 — Observability (metrics, logs, traces, dashboards, alerts)

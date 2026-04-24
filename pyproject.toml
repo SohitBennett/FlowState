@@ -92,9 +92,13 @@ branch = true
 source = ["flowstate"]
 omit = [
     # Heavy I/O entry points — covered by the integration pipeline (`make pipeline`),
-    # not by unit tests. evaluate.py stays in coverage because it is pure math.
+    # not by unit tests. evaluate.py / postprocess.py / batcher.py stay in coverage
+    # because they are pure (or fake-able) logic.
     "src/flowstate/training/train.py",
     "src/flowstate/training/export_onnx.py",
     "src/flowstate/training/register.py",
     "src/flowstate/training/data.py",
+    "src/flowstate/inference/runtime.py",
+    "src/flowstate/inference/tokenizer.py",
+    "src/flowstate/inference/warmup.py",
 ]

@@ -65,7 +65,7 @@ register:
 pipeline: train export register
 
 benchmark:
-	$(PYTHON) scripts/benchmark.py
+	$(PYTHON) scripts/benchmark.py $(BENCHMARK_ARGS)
 
 smoke:
 	bash scripts/smoke.sh
