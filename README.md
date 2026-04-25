@@ -87,6 +87,36 @@ make benchmark         # PyTorch FP32 vs ONNX FP32 vs ONNX FP16 + dynamic batche
 Writes `docs/perf/fp16-vs-fp32.md` + `.json`. Fails non-zero if the FP16 + batcher
 throughput is less than 3x the naive PyTorch baseline.
 
+## API (Phase 3)
+
+```
+POST /v1/predict          single text classification
+POST /v1/predict/batch    up to 128 texts per request, fanned through the batcher
+POST /admin/reload        hot-swap the model from disk (auth'd, lock-protected)
+GET  /healthz             liveness
+GET  /readyz              readiness (model_loaded, cache_connected)
+GET  /metrics             Prometheus
+GET  /docs                OpenAPI / Swagger UI
+```
+
+All non-public routes require `x-api-key: $FLOWSTATE_API_KEY`. Per-key
+token-bucket rate limit (`FLOWSTATE_RATE_LIMIT_RATE` / `_BURST`) and a
+`Content-Length` body-size cap (`FLOWSTATE_MAX_REQUEST_BYTES`, default 1 MiB)
+are enforced as middleware. Middleware order, outermost first:
+
+```
+RequestContext -> BodySizeLimit -> Auth -> RateLimit -> route
+```
+
+### Quick try
+
+```bash
+curl -s http://localhost:8000/v1/predict \
+  -H "x-api-key: $FLOWSTATE_API_KEY" \
+  -H "content-type: application/json" \
+  -d '{"text": "Apple announces new products."}'
+```
+
 ## Project layout
 
 See [PLAN.md §3](PLAN.md#3-repository-layout).
@@ -96,7 +126,7 @@ See [PLAN.md §3](PLAN.md#3-repository-layout).
 - [x] **Phase 0** — Foundations (tooling, compose stack, CI skeleton, FastAPI skeleton)
 - [x] **Phase 1 (code)** — Training pipeline (AG News + DistilBERT + MLflow + ONNX FP16) — *awaiting first integration run*
 - [x] **Phase 2 (code)** — Inference runtime (ONNX, dynamic batcher, warmup, benchmark harness) — *awaiting first benchmark run*
-- [ ] Phase 3 — API layer (auth, rate limit, contract tests)
+- [x] **Phase 3** — API layer (predict + batch + admin/reload routes, auth, body-size limit, per-key token-bucket rate limit, schemathesis contract test, integration tests)
 - [ ] Phase 4 — Redis caching (single-flight, jittered TTL)
 - [ ] Phase 5 — Observability (metrics, logs, traces, dashboards, alerts)
 - [ ] Phase 6 — CI/CD + zero-downtime deploys

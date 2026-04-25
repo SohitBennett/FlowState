@@ -101,4 +101,5 @@ omit = [
     "src/flowstate/inference/runtime.py",
     "src/flowstate/inference/tokenizer.py",
     "src/flowstate/inference/warmup.py",
+    "src/flowstate/api/inference_lifecycle.py",
 ]
