@@ -1,16 +1,21 @@
 """FastAPI application factory.
 
-Lifespan hook loads the ONNX runtime, starts the dynamic batcher, and
-runs warmup before readiness flips green. If the model artifacts are
-missing (fresh clone, pre-training), the app still boots but readyz
-reports `model_loaded=False` so the API can be developed iteratively.
+Lifespan: load the ONNX model + warm up + start the batcher (Phase 2 hooks),
+then later install the Redis cache (Phase 4) and tracing exporters
+(Phase 5). Middleware execution order, outermost first:
+
+    RequestContextMiddleware  → request_id + timing + metrics
+    BodySizeLimitMiddleware   → 413 on oversized requests
+    AuthMiddleware            → 401 on missing/invalid x-api-key
+    RateLimitMiddleware       → 429 on per-key budget exhaustion
+    routes
 """
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.responses import ORJSONResponse
@@ -18,54 +23,17 @@ from fastapi.responses import ORJSONResponse
 from flowstate import __version__
 from flowstate.api.deps import AppState
 from flowstate.api.errors import FlowStateError, flowstate_error_handler
-from flowstate.api.middleware import AuthMiddleware, RequestContextMiddleware
-from flowstate.api.routes import health
-from flowstate.config import Settings, get_settings
-from flowstate.inference.batcher import DynamicBatcher
-from flowstate.inference.runtime import ModelRuntime, RuntimeConfig
-from flowstate.inference.tokenizer import CachedTokenizer
-from flowstate.inference.warmup import warmup
+from flowstate.api.inference_lifecycle import load_inference
+from flowstate.api.middleware import (
+    AuthMiddleware,
+    BodySizeLimitMiddleware,
+    RateLimitMiddleware,
+    RequestContextMiddleware,
+)
+from flowstate.api.rate_limit import RateLimiter
+from flowstate.api.routes import admin, health, predict
+from flowstate.config import get_settings
 from flowstate.logging import configure_logging, get_logger
-
-
-async def _try_load_inference(state: AppState, settings: Settings) -> None:
-    log = get_logger(__name__)
-    onnx_path = Path(settings.model_path)
-    tokenizer_dir = Path(settings.tokenizer_path)
-
-    if not onnx_path.exists() or not tokenizer_dir.exists():
-        log.warning(
-            "model_artifacts_missing",
-            onnx_path=str(onnx_path),
-            tokenizer_dir=str(tokenizer_dir),
-            hint="run `make pipeline` to produce artifacts",
-        )
-        return
-
-    runtime = ModelRuntime.from_artifacts(
-        onnx_path=onnx_path,
-        tokenizer_dir=tokenizer_dir,
-        runtime_cfg=RuntimeConfig(
-            intra_op_num_threads=settings.intra_op_num_threads,
-            inter_op_num_threads=settings.inter_op_num_threads,
-        ),
-    )
-    tokenizer = CachedTokenizer(tokenizer_dir, max_seq_len=settings.max_seq_len)
-    batcher = DynamicBatcher(
-        tokenizer=tokenizer,
-        runtime=runtime,
-        max_batch_size=settings.batch_max_size,
-        max_wait_ms=settings.batch_max_wait_ms,
-    )
-    await batcher.start()
-    await warmup(runtime, tokenizer, iterations=settings.warmup_iterations)
-
-    state.runtime = runtime
-    state.tokenizer = tokenizer
-    state.batcher = batcher
-    state.model_loaded = True
-    state.ready = True
-    log.info("inference_ready", labels=runtime.labels, onnx_path=str(onnx_path))
 
 
 @asynccontextmanager
@@ -76,9 +44,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     log.info("flowstate_starting", env=settings.env, version=__version__)
 
     state: AppState = app.state.flowstate
+    state.reload_lock = asyncio.Lock()
 
     try:
-        await _try_load_inference(state, settings)
+        await load_inference(state, settings)
     except Exception:  # noqa: BLE001
         log.exception("inference_load_failed")
 
@@ -92,6 +61,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 def create_app() -> FastAPI:
+    settings = get_settings()
     app = FastAPI(
         title="FlowState Inference API",
         version=__version__,
@@ -99,17 +69,25 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # Seed the per-app state eagerly so endpoints that depend on it work even
-    # when lifespan hasn't run (e.g. in tests that construct TestClient without
-    # using it as a context manager). Lifespan later mutates this instance.
+    # Seed per-app state eagerly so endpoints work even without lifespan
+    # (bare TestClient instantiation, schemathesis ASGI calls, etc.).
     app.state.flowstate = AppState()
 
+    limiter = RateLimiter(rate=settings.rate_limit_rate, burst=settings.rate_limit_burst)
+
+    # add_middleware is LIFO: the LAST registered middleware runs FIRST
+    # (outermost). Order below produces:
+    #   RequestContext > BodySizeLimit > Auth > RateLimit > endpoint
+    app.add_middleware(RateLimitMiddleware, limiter=limiter)
     app.add_middleware(AuthMiddleware)
+    app.add_middleware(BodySizeLimitMiddleware, max_bytes=settings.max_request_bytes)
     app.add_middleware(RequestContextMiddleware)
 
     app.add_exception_handler(FlowStateError, flowstate_error_handler)  # type: ignore[arg-type]
 
     app.include_router(health.router)
+    app.include_router(predict.router)
+    app.include_router(admin.router)
     return app
 
 

@@ -5,6 +5,11 @@ from __future__ import annotations
 from pydantic import BaseModel, ConfigDict, Field
 
 
+# `model_*` field names trip Pydantic v2's "protected namespace" warning on
+# older 2.x; opt out per-model since `model_version` is part of the public API.
+_RESPONSE_CONFIG = ConfigDict(protected_namespaces=())
+
+
 class PredictRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
@@ -23,6 +28,8 @@ class Prediction(BaseModel):
 
 
 class PredictResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
     model_version: str
     cached: bool
     prediction: Prediction
@@ -30,6 +37,8 @@ class PredictResponse(BaseModel):
 
 
 class BatchPredictResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
     model_version: str
     predictions: list[Prediction]
     latency_ms: float
@@ -44,3 +53,20 @@ class ReadyResponse(BaseModel):
     status: str
     model_loaded: bool
     cache_connected: bool
+
+
+class ErrorBody(BaseModel):
+    code: str
+    message: str
+
+
+class ErrorResponse(BaseModel):
+    error: ErrorBody
+
+
+class AdminReloadResponse(BaseModel):
+    model_config = _RESPONSE_CONFIG
+
+    status: str
+    model_version: str | None
+    ready: bool

@@ -41,7 +41,12 @@ class Settings(BaseSettings):
     batch_max_size: int = 32
     batch_max_wait_ms: int = 5
 
-    # Redis
+    # Request limits + per-key rate limit (token bucket)
+    max_request_bytes: int = 1_048_576  # 1 MiB
+    rate_limit_rate: float = 100.0  # tokens per second per key
+    rate_limit_burst: int = 200  # bucket capacity per key
+
+    # Redis (Phase 4)
     redis_url: str = "redis://localhost:6379/0"
     cache_ttl_seconds: int = 600
 
